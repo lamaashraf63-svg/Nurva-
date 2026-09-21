@@ -1,0 +1,870 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NURVA | Atelier & Store</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-main: #FAFAFA;
+            --bg-card: #FFFFFF;
+            --text-primary: #18181B;
+            --text-secondary: #71717A;
+            --border-color: #E4E4E7;
+            --accent-dark: #09090B;
+        }
+        body { font-family: 'Cairo', sans-serif; background-color: var(--bg-main); color: var(--text-primary); }
+        ::-webkit-scrollbar { width: 5px; height: 5px; }
+        ::-webkit-scrollbar-track { background: var(--bg-main); }
+        ::-webkit-scrollbar-thumb { background: #D4D4D8; border-radius: 3px; }
+        .smooth-transition { transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col selection:bg-black selection:text-white">
+
+    <div id="app" class="flex-1 flex flex-col"></div>
+
+    <script>
+        let products = JSON.parse(localStorage.getItem('nurva_products')) || [
+            { 
+                id: 1, 
+                name: 'Luxury Wool Coat', 
+                desc: 'A classic and elegant design made from the finest natural wool fabrics, perfect for cold weather and an exceptional look.', 
+                price: 3800, 
+                sizes: ['S', 'M', 'L', 'XL'],
+                colors: ['Black', 'Brown', 'Grey'],
+                images: [
+                    'https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?w=800'
+                ] 
+            },
+            { 
+                id: 2, 
+                name: 'Classic Leather Shoes', 
+                desc: 'Handmade shoes crafted from premium natural leather, designed to provide ultimate comfort and style all day long.', 
+                price: 2450, 
+                sizes: ['39', '40', '41', '42'],
+                colors: ['Black', 'Camel'],
+                images: [
+                    'https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=800'
+                ] 
+            }
+        ];
+        
+        let cart = [];
+        let wishlist = [];
+        let orders = JSON.parse(localStorage.getItem('nurva_orders')) || [];
+        let currentUser = null;
+        let currentView = 'login'; 
+        let selectedProduct = null;
+        let activeImageIndex = 0;
+        let currentSelectedSize = '';
+        let currentSelectedColor = '';
+        let showAddModal = false;
+        let editingProduct = null;
+        let showCheckoutModal = false;
+        let notificationMsg = '';
+        let mobileMenuOpen = false;
+
+        function showNotification(msg) {
+            notificationMsg = msg;
+            render();
+            setTimeout(() => {
+                notificationMsg = '';
+                render();
+            }, 3000);
+        }
+
+        function render() {
+            const app = document.getElementById('app');
+            app.innerHTML = '';
+
+            let notificationHTML = notificationMsg ? `
+                <div class="fixed bottom-4 right-4 left-4 sm:left-auto sm:right-6 z-50 bg-[#09090B] text-white px-6 py-3.5 rounded-xl shadow-2xl text-xs font-semibold tracking-wide transition-all transform duration-300 border border-zinc-800 text-center sm:text-left">
+                    ✨ ${notificationMsg}
+                </div>
+            ` : '';
+
+            let newOrdersCount = orders.filter(o => o.isNew).length;
+
+            if (currentView === 'login') {
+                app.innerHTML = `
+                    <div class="min-h-screen flex items-center justify-center p-4 sm:p-6 bg-[#FAFAFA]">
+                        <div class="max-w-md w-full bg-white rounded-2xl shadow-sm border border-zinc-200 p-8 sm:p-10 smooth-transition">
+                            <div class="text-center mb-8 sm:mb-10">
+                                <span class="text-[11px] uppercase tracking-[0.3em] text-zinc-400 font-semibold">Welcome to</span>
+                                <h1 class="text-2xl sm:text-3xl font-light tracking-widest text-zinc-900 mt-1">NURVA</h1>
+                                <div class="w-10 h-[2px] bg-zinc-900 mx-auto mt-4"></div>
+                            </div>
+                            <div class="space-y-6">
+                                <div>
+                                    <label class="block text-[11px] font-semibold uppercase tracking-wider text-zinc-500 mb-2">Username</label>
+                                    <input type="text" id="username-input" value=""
+                                        class="w-full bg-zinc-50 border border-zinc-200 rounded-xl px-4 py-3.5 text-sm focus:outline-none focus:border-black focus:bg-white smooth-transition"
+                                        placeholder="Enter your name...">
+                                </div>
+                                <button onclick="handleLogin()" class="w-full bg-[#09090B] text-white rounded-xl py-4 font-semibold text-xs uppercase tracking-widest hover:bg-zinc-800 smooth-transition shadow-sm">
+                                    Enter Store
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    ${notificationHTML}
+                `;
+            } else if (currentView.startsWith('user')) {
+                app.innerHTML = `
+                    <div class="min-h-screen flex flex-col bg-[#FAFAFA]">
+                        <!-- هيدر متجاوب بالكامل -->
+                        <header class="bg-[#09090B] text-white backdrop-blur-md border-b border-zinc-800 sticky top-0 z-40">
+                            <div class="max-w-7xl mx-auto px-4 sm:px-8 h-20 flex items-center justify-between">
+                                <div class="flex items-center gap-3 cursor-pointer" onclick="switchView('user-products')">
+                                    <span class="text-lg sm:text-xl font-light tracking-[0.2em] text-white">NURVA</span>
+                                    <span class="hidden sm:inline-block text-[10px] bg-zinc-800 text-zinc-300 px-2.5 py-1 rounded-full uppercase tracking-wider font-semibold border border-zinc-700">${currentUser}</span>
+                                </div>
+                                
+                                <!-- Desktop Nav -->
+                                <nav class="hidden md:flex items-center gap-8">
+                                    <button onclick="switchView('user-products')" class="text-xs uppercase tracking-wider font-semibold ${currentView === 'user-products' ? 'text-white border-b-2 border-white pb-1' : 'text-zinc-400 hover:text-white'} smooth-transition">Products</button>
+                                    <button onclick="switchView('user-cart')" class="relative flex items-center gap-1.5 text-xs uppercase tracking-wider font-semibold ${currentView === 'user-cart' ? 'text-white border-b-2 border-white pb-1' : 'text-zinc-400 hover:text-white'} smooth-transition">
+                                        <span>Cart</span>
+                                        <span class="bg-zinc-100 text-zinc-900 text-[9px] w-4 h-4 rounded-full flex items-center justify-center font-bold">${cart.length}</span>
+                                    </button>
+                                    <button onclick="switchView('user-wishlist')" class="relative flex items-center gap-1.5 text-xs uppercase tracking-wider font-semibold ${currentView === 'user-wishlist' ? 'text-white border-b-2 border-white pb-1' : 'text-zinc-400 hover:text-white'} smooth-transition">
+                                        <span>Wishlist</span>
+                                        <span class="bg-zinc-800 text-zinc-200 text-[9px] w-4 h-4 rounded-full flex items-center justify-center font-bold border border-zinc-700">${wishlist.length}</span>
+                                    </button>
+                                    <button onclick="logout()" class="text-[11px] uppercase tracking-wider font-semibold text-zinc-300 hover:text-white smooth-transition border border-zinc-700 px-3.5 py-2 rounded-xl bg-zinc-900">Logout</button>
+                                </nav>
+
+                                <!-- Mobile Menu Button -->
+                                <button onclick="mobileMenuOpen = !mobileMenuOpen; render();" class="md:hidden text-zinc-300 hover:text-white p-2 focus:outline-none">
+                                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="${mobileMenuOpen ? 'M6 18L18 6M6 6l12 12' : 'M4 6h16M4 12h16M4 18h16'}"></path></svg>
+                                </button>
+                            </div>
+
+                            <!-- Mobile Dropdown Menu -->
+                            ${mobileMenuOpen ? `
+                                <div class="md:hidden bg-[#09090B] border-b border-zinc-800 px-6 py-6 space-y-4">
+                                    <div class="text-[10px] text-zinc-400 uppercase tracking-wider">Logged in as: <span class="text-white font-bold">${currentUser}</span></div>
+                                    <button onclick="mobileMenuOpen = false; switchView('user-products');" class="block w-full text-left text-xs uppercase tracking-wider font-semibold text-zinc-300 hover:text-white py-2">Products</button>
+                                    <button onclick="mobileMenuOpen = false; switchView('user-cart');" class="flex justify-between items-center w-full text-xs uppercase tracking-wider font-semibold text-zinc-300 hover:text-white py-2">
+                                        <span>Cart</span>
+                                        <span class="bg-zinc-100 text-zinc-900 text-[9px] px-2 py-0.5 rounded-full font-bold">${cart.length}</span>
+                                    </button>
+                                    <button onclick="mobileMenuOpen = false; switchView('user-wishlist');" class="flex justify-between items-center w-full text-xs uppercase tracking-wider font-semibold text-zinc-300 hover:text-white py-2">
+                                        <span>Wishlist</span>
+                                        <span class="bg-zinc-800 text-zinc-200 text-[9px] px-2 py-0.5 rounded-full font-bold border border-zinc-700">${wishlist.length}</span>
+                                    </button>
+                                    <button onclick="mobileMenuOpen = false; logout();" class="block w-full text-center text-xs uppercase tracking-wider font-semibold text-rose-400 bg-zinc-900 border border-zinc-800 py-3 rounded-xl mt-4">Logout</button>
+                                </div>
+                            ` : ''}
+                        </header>
+
+                        <main class="max-w-7xl mx-auto px-4 sm:px-8 py-8 sm:py-12 flex-1 w-full">
+                            ${getUserContent()}
+                        </main>
+                        <footer class="border-t border-zinc-200 py-8 text-center text-xs text-zinc-400 tracking-wider">
+                            © 2026 NURVA. ALL RIGHTS RESERVED.
+                        </footer>
+                    </div>
+                    ${notificationHTML}
+                `;
+            } else if (currentView.startsWith('seller')) {
+                app.innerHTML = `
+                    <div class="min-h-screen flex flex-col bg-[#FAFAFA]">
+                        <header class="bg-[#09090B] text-white sticky top-0 z-45 border-b border-zinc-800">
+                            <div class="max-w-7xl mx-auto px-4 sm:px-8 h-20 flex items-center justify-between">
+                                <div class="flex items-center gap-3">
+                                    <span class="text-lg sm:text-xl font-light tracking-[0.2em]">NURVA VENDOR</span>
+                                    <span class="hidden sm:inline-block text-[10px] bg-zinc-800 text-zinc-300 px-2.5 py-1 rounded-full uppercase tracking-wider border border-zinc-700">Dashboard</span>
+                                </div>
+
+                                <!-- Desktop Seller Nav -->
+                                <div class="hidden md:flex items-center gap-8">
+                                    <button onclick="switchView('seller-products')" class="text-xs uppercase tracking-wider font-medium ${currentView === 'seller-products' ? 'text-white border-b-2 border-white pb-1' : 'text-zinc-400 hover:text-white'} smooth-transition">Products</button>
+                                    <button onclick="openSellerOrders()" class="relative flex items-center gap-1.5 text-xs uppercase tracking-wider font-medium ${currentView === 'seller-orders' ? 'text-white border-b-2 border-white pb-1' : 'text-zinc-400 hover:text-white'} smooth-transition">
+                                        <span>Orders</span>
+                                        ${newOrdersCount > 0 ? `<span class="bg-zinc-100 text-zinc-900 text-[9px] px-1.5 py-0.5 rounded-full font-bold">${newOrdersCount}</span>` : ''}
+                                    </button>
+                                    <button onclick="logout()" class="text-[11px] uppercase tracking-wider font-semibold text-zinc-300 hover:text-white border border-zinc-700 px-3.5 py-2 rounded-xl smooth-transition bg-zinc-900">Logout</button>
+                                </div>
+
+                                <!-- Mobile Menu Button -->
+                                <button onclick="mobileMenuOpen = !mobileMenuOpen; render();" class="md:hidden text-zinc-300 hover:text-white p-2">
+                                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="${mobileMenuOpen ? 'M6 18L18 6M6 6l12 12' : 'M4 6h16M4 12h16M4 18h16'}"></path></svg>
+                                </button>
+                            </div>
+
+                            <!-- Mobile Dropdown Seller -->
+                            ${mobileMenuOpen ? `
+                                <div class="md:hidden bg-[#09090B] border-b border-zinc-800 px-6 py-6 space-y-4">
+                                    <button onclick="mobileMenuOpen = false; switchView('seller-products');" class="block w-full text-left text-xs uppercase tracking-wider font-semibold text-zinc-300 hover:text-white py-2">Products</button>
+                                    <button onclick="mobileMenuOpen = false; openSellerOrders();" class="flex justify-between items-center w-full text-xs uppercase tracking-wider font-semibold text-zinc-300 hover:text-white py-2">
+                                        <span>Orders</span>
+                                        ${newOrdersCount > 0 ? `<span class="bg-zinc-100 text-zinc-900 text-[9px] px-2 py-0.5 rounded-full font-bold">${newOrdersCount}</span>` : ''}
+                                    </button>
+                                    <button onclick="mobileMenuOpen = false; logout();" class="block w-full text-center text-xs uppercase tracking-wider font-semibold text-rose-400 bg-zinc-900 border border-zinc-800 py-3 rounded-xl mt-4">Logout</button>
+                                </div>
+                            ` : ''}
+                        </header>
+
+                        <main class="max-w-7xl mx-auto px-4 sm:px-8 py-8 sm:py-12 flex-1 w-full relative">
+                            ${getSellerContent()}
+                        </main>
+                        <footer class="border-t border-zinc-200 py-8 text-center text-xs text-zinc-400 tracking-wider">
+                            NURVA VENDOR DASHBOARD — PROFESSIONAL EDITION
+                        </footer>
+                    </div>
+                    ${notificationHTML}
+                `;
+            }
+        }
+
+        function handleLogin() {
+            const inputVal = document.getElementById('username-input').value.trim();
+            currentUser = inputVal === '' ? 'Essam/Hany' : inputVal;
+            const lowerUser = currentUser.toLowerCase();
+            currentView = (lowerUser === 'seller' || lowerUser === 'essam/hany' || lowerUser === 'essam' || lowerUser === 'hany') ? 'seller-products' : 'user-products';
+            mobileMenuOpen = false;
+            render();
+        }
+
+        function logout() {
+            currentUser = null;
+            currentView = 'login';
+            selectedProduct = null;
+            mobileMenuOpen = false;
+            render();
+        }
+
+        function switchView(view) {
+            currentView = view;
+            selectedProduct = null;
+            mobileMenuOpen = false;
+            render();
+        }
+
+        function openSellerOrders() {
+            orders.forEach(o => o.isNew = false);
+            localStorage.setItem('nurva_orders', JSON.stringify(orders));
+            switchView('seller-orders');
+        }
+
+        function openProductDetails(id) {
+            selectedProduct = products.find(p => p.id === id);
+            activeImageIndex = 0;
+            currentSelectedSize = selectedProduct.sizes && selectedProduct.sizes.length > 0 ? selectedProduct.sizes[0] : '';
+            currentSelectedColor = selectedProduct.colors && selectedProduct.colors.length > 0 ? selectedProduct.colors[0] : '';
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+            render();
+        }
+
+        function getUserContent() {
+            if (selectedProduct) {
+                const isFav = wishlist.some(item => item.id === selectedProduct.id);
+                const mainImg = selectedProduct.images && selectedProduct.images.length > 0 ? selectedProduct.images[activeImageIndex] : 'https://via.placeholder.com/600';
+                
+                return `
+                    <button onclick="selectedProduct = null; render();" class="text-xs font-semibold uppercase tracking-wider text-zinc-500 hover:text-zinc-900 mb-6 sm:mb-8 flex items-center gap-2 smooth-transition">
+                        ← Back to Products
+                    </button>
+                    
+                    <div class="bg-white border border-zinc-200 rounded-2xl p-6 sm:p-10 shadow-sm grid grid-cols-1 lg:grid-cols-2 gap-8 sm:gap-12 items-start">
+                        <div class="space-y-4 lg:sticky lg:top-28">
+                            <div class="h-80 sm:h-[480px] bg-zinc-50 rounded-xl overflow-hidden flex items-center justify-center border border-zinc-100">
+                                <img src="${mainImg}" alt="${selectedProduct.name}" class="w-full h-full object-cover smooth-transition">
+                            </div>
+                            ${selectedProduct.images && selectedProduct.images.length > 1 ? `
+                                <div class="flex gap-3 overflow-x-auto pb-2">
+                                    ${selectedProduct.images.map((img, idx) => `
+                                        <button onclick="activeImageIndex = ${idx}; render();" class="w-16 h-16 sm:w-20 sm:h-20 rounded-xl overflow-hidden border-2 shrink-0 ${activeImageIndex === idx ? 'border-zinc-900' : 'border-transparent opacity-70'} smooth-transition">
+                                            <img src="${img}" class="w-full h-full object-cover">
+                                        </button>
+                                    `).join('')}
+                                </div>
+                            ` : ''}
+                        </div>
+
+                        <div class="flex flex-col justify-between py-2">
+                            <div>
+                                <div class="flex justify-between items-start mb-4">
+                                    <div>
+                                        <span class="text-[10px] uppercase tracking-[0.2em] text-zinc-400 font-semibold">Exquisite Collection</span>
+                                        <h2 class="text-2xl sm:text-3xl font-light tracking-wide text-zinc-900 mt-1">${selectedProduct.name}</h2>
+                                    </div>
+                                    <button onclick="toggleWishlist(${selectedProduct.id})" class="text-2xl p-2 rounded-full hover:bg-zinc-50 smooth-transition">${isFav ? '❤️' : '🤍'}</button>
+                                </div>
+                                
+                                <p class="text-xl sm:text-2xl font-light text-zinc-900 mb-6 tracking-wide">${selectedProduct.price} <span class="text-xs text-zinc-500">EGP</span></p>
+                                
+                                <div class="w-full h-[1px] bg-zinc-100 my-6"></div>
+                                
+                                <p class="text-zinc-600 text-sm leading-relaxed mb-8 font-light">${selectedProduct.desc}</p>
+
+                                <div class="space-y-6 mb-8 bg-zinc-50/65 p-5 sm:p-6 rounded-xl border border-zinc-200/60">
+                                    ${selectedProduct.sizes && selectedProduct.sizes.length > 0 ? `
+                                        <div>
+                                            <label class="block text-xs font-bold uppercase tracking-wider text-zinc-700 mb-3">Select Size:</label>
+                                            <div class="flex gap-2.5 flex-wrap">
+                                                ${selectedProduct.sizes.map((sz) => `
+                                                    <button type="button" onclick="currentSelectedSize = '${sz}'; render();" class="px-4 sm:px-5 py-2.5 rounded-xl text-xs font-bold tracking-wider smooth-transition ${currentSelectedSize === sz ? 'bg-zinc-900 text-white shadow-sm' : 'bg-white border border-zinc-200 text-zinc-800 hover:border-zinc-900'}">${sz}</button>
+                                                `).join('')}
+                                            </div>
+                                        </div>
+                                    ` : ''}
+                                    
+                                    ${selectedProduct.colors && selectedProduct.colors.length > 0 ? `
+                                        <div>
+                                            <label class="block text-xs font-bold uppercase tracking-wider text-zinc-700 mb-3">Select Color:</label>
+                                            <div class="flex gap-2.5 flex-wrap">
+                                                ${selectedProduct.colors.map((col) => `
+                                                    <button type="button" onclick="currentSelectedColor = '${col}'; render();" class="px-4 sm:px-5 py-2.5 rounded-xl text-xs font-bold tracking-wider smooth-transition ${currentSelectedColor === col ? 'bg-zinc-900 text-white shadow-sm' : 'bg-white border border-zinc-200 text-zinc-800 hover:border-zinc-900'}">${col}</button>
+                                                `).join('')}
+                                            </div>
+                                        </div>
+                                    ` : ''}
+
+                                    <div>
+                                        <label class="block text-xs font-bold uppercase tracking-wider text-zinc-700 mb-2">Quantity:</label>
+                                        <input type="number" id="selected-qty" value="1" min="1" class="w-32 bg-white border border-zinc-300 rounded-xl px-4 py-2.5 text-sm font-bold text-center focus:outline-none focus:border-zinc-900">
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="space-y-3 pt-2">
+                                <button onclick="addToCartWithOptions(${selectedProduct.id})" class="w-full bg-zinc-100 text-zinc-900 text-xs uppercase tracking-widest font-bold py-4 rounded-xl hover:bg-zinc-200 smooth-transition border border-zinc-200">Add to Bag</button>
+                                <button onclick="openCheckoutModal()" class="w-full bg-[#09090B] text-white text-xs uppercase tracking-widest font-bold py-4 rounded-xl hover:bg-zinc-800 smooth-transition shadow-sm">Buy Now</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    ${showCheckoutModal ? `
+                        <div class="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+                            <div class="bg-white rounded-2xl p-6 sm:p-8 max-w-md w-full shadow-xl border border-zinc-200">
+                                <h3 class="text-xl font-light tracking-wide mb-2">Complete Order</h3>
+                                <p class="text-xs text-zinc-400 mb-6 uppercase tracking-wider">Cash on Delivery</p>
+                                
+                                <div class="space-y-5">
+                                    <div>
+                                        <label class="block text-[11px] font-semibold uppercase tracking-wider text-zinc-500 mb-2">Phone Number</label>
+                                        <input type="text" id="chk-phone" placeholder="01012345678" class="w-full bg-zinc-50 border border-zinc-200 rounded-xl px-4 py-3.5 text-sm focus:outline-none focus:border-zinc-900">
+                                    </div>
+
+                                    <div>
+                                        <label class="block text-[11px] font-semibold uppercase tracking-wider text-zinc-500 mb-2">Shipping Address</label>
+                                        <textarea id="chk-address" placeholder="City, Street Name, Building No..." rows="3" class="w-full bg-zinc-50 border border-zinc-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-zinc-900"></textarea>
+                                    </div>
+
+                                    <div class="flex gap-3 pt-4">
+                                        <button onclick="submitDirectOrder()" class="flex-1 bg-zinc-900 text-white py-4 rounded-xl text-xs uppercase tracking-widest font-semibold hover:bg-zinc-800 smooth-transition">Confirm Order</button>
+                                        <button onclick="showCheckoutModal = false; render();" class="bg-zinc-100 text-zinc-700 px-6 py-4 rounded-xl text-xs uppercase tracking-widest font-semibold hover:bg-zinc-200 smooth-transition">Cancel</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    ` : ''}
+                `;
+            }
+
+            if (currentView === 'user-products') {
+                return `
+                    <div class="mb-8 sm:mb-10 text-center">
+                        <span class="text-xs uppercase tracking-[0.3em] text-zinc-400 font-semibold">Discover Our</span>
+                        <h2 class="text-2xl sm:text-3xl font-light tracking-widest text-zinc-900 mt-1">NEW ARRIVALS</h2>
+                        <div class="w-8 h-[2px] bg-zinc-900 mx-auto mt-3"></div>
+                    </div>
+
+                    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 sm:gap-8">
+                        ${products.map(p => {
+                            const isFav = wishlist.some(item => item.id === p.id);
+                            const img = p.images && p.images[0] ? p.images[0] : 'https://via.placeholder.com/400';
+                            return `
+                                <div class="bg-white border border-zinc-200 rounded-2xl overflow-hidden flex flex-col justify-between group shadow-sm hover:shadow-md smooth-transition">
+                                    <div class="h-72 sm:h-80 bg-zinc-50 cursor-pointer overflow-hidden relative" onclick="openProductDetails(${p.id})">
+                                        <img src="${img}" class="w-full h-full object-cover group-hover:scale-105 smooth-transition">
+                                        <button onclick="event.stopPropagation(); toggleWishlist(${p.id});" class="absolute top-4 right-4 w-10 h-10 bg-white/90 backdrop-blur-md rounded-full flex items-center justify-center text-lg shadow-sm hover:scale-110 smooth-transition">${isFav ? '❤️' : '🤍'}</button>
+                                    </div>
+                                    <div class="p-5 sm:p-6 flex flex-col flex-1 justify-between">
+                                        <div>
+                                            <h3 class="font-normal tracking-wide text-base cursor-pointer hover:text-zinc-600 smooth-transition mb-1" onclick="openProductDetails(${p.id})">${p.name}</h3>
+                                            <p class="text-zinc-400 text-xs line-clamp-1 mb-4 font-light">${p.desc}</p>
+                                        </div>
+                                        <div>
+                                            <div class="font-semibold text-zinc-900 mb-4 text-sm">${p.price} EGP</div>
+                                            <button onclick="openProductDetails(${p.id})" class="w-full bg-zinc-900 text-white text-[11px] uppercase tracking-widest font-semibold py-3 rounded-xl hover:bg-zinc-800 smooth-transition">View Details</button>
+                                        </div>
+                                    </div>
+                                </div>
+                            `;
+                        }).join('')}
+                    </div>
+                `;
+            } else if (currentView === 'user-cart') {
+                let total = cart.reduce((sum, item) => sum + (item.price * item.qty), 0);
+                return `
+                    <div class="mb-8 sm:mb-10">
+                        <span class="text-xs uppercase tracking-[0.3em] text-zinc-400 font-semibold">Shopping Bag</span>
+                        <h2 class="text-2xl sm:text-3xl font-light tracking-widest text-zinc-900 mt-1">Shopping Cart</h2>
+                    </div>
+                    <div class="bg-white border border-zinc-200 rounded-2xl p-6 sm:p-8 shadow-sm max-w-3xl mx-auto md:mx-0">
+                        ${cart.length === 0 ? `
+                            <div class="py-16 text-center">
+                                <div class="text-4xl text-zinc-300 mb-3">🛍️</div>
+                                <p class="text-zinc-400 text-sm font-light">Your shopping cart is currently empty.</p>
+                            </div>
+                        ` : 
+                            `<div class="divide-y divide-zinc-100">
+                                ${cart.map((item, index) => `
+                                    <div class="py-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 text-sm">
+                                        <div class="flex items-center gap-4">
+                                            <img src="${item.images && item.images[0] ? item.images[0] : ''}" class="w-16 h-20 rounded-xl object-cover border border-zinc-100 shrink-0">
+                                            <div>
+                                                <p class="font-normal text-base mb-1">${item.name}</p>
+                                                <p class="text-zinc-400 text-xs mb-1 font-light">Size: ${item.size} | Color: ${item.color} | Qty: ${item.qty}</p>
+                                                <p class="text-zinc-900 font-semibold text-xs">${item.price * item.qty} EGP</p>
+                                            </div>
+                                        </div>
+                                        <div class="flex items-center gap-3 w-full sm:w-auto justify-end pt-2 sm:pt-0 border-t sm:border-t-0 border-zinc-100">
+                                            <button onclick="buyItemAgain(${index})" class="text-[11px] uppercase tracking-wider bg-zinc-100 text-zinc-900 px-3 py-2 rounded-lg font-semibold hover:bg-zinc-900 hover:text-white smooth-transition">Buy Again</button>
+                                            <button onclick="removeFromCart(${index})" class="text-xs text-rose-500 hover:text-rose-700 font-medium px-3 py-2 rounded-lg hover:bg-rose-50 smooth-transition">Remove</button>
+                                        </div>
+                                    </div>
+                                `).join('')}
+                            </div>
+                            <div class="mt-8 pt-8 border-t border-zinc-100 flex flex-col gap-4">
+                                <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                                    <div>
+                                        <span class="text-xs uppercase tracking-wider text-zinc-400 block font-semibold">Final Total</span>
+                                        <span class="text-2xl font-light tracking-wide text-zinc-900">${total} EGP</span>
+                                    </div>
+                                    <button onclick="openCheckoutModal()" class="w-full sm:w-auto bg-zinc-900 text-white px-8 py-4 rounded-xl text-xs uppercase tracking-widest font-semibold hover:bg-zinc-800 smooth-transition shadow-sm">Proceed to Checkout</button>
+                                </div>
+                                <button onclick="buyAllAgain()" class="w-full bg-zinc-100 text-zinc-900 py-3.5 rounded-xl text-xs uppercase tracking-widest font-semibold hover:bg-zinc-200 smooth-transition border border-zinc-200">
+                                    Buy All Items Again (+1 Qty)
+                                </button>
+                            </div>`
+                        }
+                    </div>
+                `;
+            } else if (currentView === 'user-wishlist') {
+                return `
+                    <div class="mb-8 sm:mb-10">
+                        <span class="text-xs uppercase tracking-[0.3em] text-zinc-400 font-semibold">Saved Items</span>
+                        <h2 class="text-2xl sm:text-3xl font-light tracking-widest text-zinc-900 mt-1">My Wishlist</h2>
+                    </div>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 sm:gap-8">
+                        ${wishlist.length === 0 ? `
+                            <div class="col-span-full py-16 text-center">
+                                <div class="text-4xl text-zinc-300 mb-3">🤍</div>
+                                <p class="text-zinc-400 text-sm font-light">No items in wishlist currently.</p>
+                            </div>
+                        ` :
+                            wishlist.map(p => {
+                                const img = p.images && p.images[0] ? p.images[0] : '';
+                                return `
+                                    <div class="bg-white border border-zinc-200 rounded-2xl overflow-hidden shadow-sm flex flex-col justify-between">
+                                        <div class="h-72 sm:h-80 bg-zinc-50 cursor-pointer overflow-hidden" onclick="openProductDetails(${p.id})">
+                                            <img src="${img}" class="w-full h-full object-cover">
+                                        </div>
+                                        <div class="p-5 sm:p-6">
+                                            <h3 class="font-normal text-base mb-1 cursor-pointer" onclick="openProductDetails(${p.id})">${p.name}</h3>
+                                            <div class="font-semibold mb-6 text-sm">${p.price} EGP</div>
+                                            <button onclick="openProductDetails(${p.id})" class="w-full bg-zinc-900 text-white text-[11px] uppercase tracking-widest font-semibold py-3 rounded-xl hover:bg-zinc-800 smooth-transition">View Details</button>
+                                        </div>
+                                    </div>
+                                `;
+                            }).join('')
+                        }
+                    </div>
+                `;
+            }
+        }
+
+        function getSellerContent() {
+            if (currentView === 'seller-orders') {
+                const newOrders = orders.filter(o => o.isNew);
+                const prevOrders = orders.filter(o => !o.isNew);
+
+                return `
+                    <div class="max-w-4xl mx-auto">
+                        <div class="mb-8 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                            <div>
+                                <span class="text-xs uppercase tracking-[0.3em] text-zinc-400 font-semibold">Vendor Portal</span>
+                                <h3 class="text-2xl sm:text-3xl font-light tracking-wide text-zinc-900 mt-1">Orders Management</h3>
+                            </div>
+                            ${orders.length > 0 ? `
+                                <button onclick="clearAllOrders()" class="bg-rose-50 text-rose-600 border border-rose-200 px-5 py-3 rounded-xl text-xs uppercase tracking-widest font-semibold hover:bg-rose-100 smooth-transition self-start sm:self-auto">
+                                    Clear All Orders
+                                </button>
+                            ` : ''}
+                        </div>
+
+                        ${orders.length === 0 ? '<div class="bg-white border border-zinc-200 rounded-2xl p-16 text-center text-zinc-400 text-sm font-light shadow-sm">No incoming orders currently.</div>' : `
+                            <div class="space-y-10">
+                                ${newOrders.length > 0 ? `
+                                    <div>
+                                        <h4 class="text-xs uppercase tracking-widest font-bold text-zinc-900 mb-4 flex items-center gap-2">
+                                            <span class="w-2 h-2 rounded-full bg-zinc-900 animate-pulse"></span> New Orders (${newOrders.length})
+                                        </h4>
+                                        <div class="space-y-6">
+                                            ${newOrders.map(o => renderOrderCard(o)).join('')}
+                                        </div>
+                                    </div>
+                                ` : ''}
+
+                                ${prevOrders.length > 0 ? `
+                                    <div>
+                                        <h4 class="text-xs uppercase tracking-widest font-bold text-zinc-400 mb-4">Previous Orders (${prevOrders.length})</h4>
+                                        <div class="space-y-6">
+                                            ${prevOrders.map(o => renderOrderCard(o)).join('')}
+                                        </div>
+                                    </div>
+                                ` : ''}
+                            </div>
+                        `}
+                    </div>
+                `;
+            }
+
+            return `
+                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8 sm:mb-10">
+                    <div>
+                        <span class="text-xs uppercase tracking-[0.3em] text-zinc-400 font-semibold">Vendor Portal (${currentUser})</span>
+                        <h3 class="text-2xl sm:text-3xl font-light tracking-wide text-zinc-900 mt-1">Product Management</h3>
+                    </div>
+                    <button onclick="openAddModal()" class="bg-zinc-900 text-white px-6 py-3.5 rounded-xl text-xs uppercase tracking-widest font-semibold shadow-sm hover:bg-zinc-800 smooth-transition flex items-center justify-center gap-2 self-start sm:self-auto">
+                        <span>+ Add New Product</span>
+                    </button>
+                </div>
+
+                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 sm:gap-8">
+                    ${products.map(p => {
+                        const img = p.images && p.images[0] ? p.images[0] : '';
+                        const colorNames = p.colors ? p.colors.join(', ') : 'None';
+                        return `
+                            <div class="bg-white border border-zinc-200 rounded-2xl overflow-hidden shadow-sm flex flex-col justify-between">
+                                <div class="h-64 bg-zinc-50 overflow-hidden">
+                                    <img src="${img}" class="w-full h-full object-cover">
+                                </div>
+                                <div class="p-5 sm:p-6 flex flex-col flex-1 justify-between">
+                                    <div>
+                                        <h3 class="font-normal text-base mb-1">${p.name}</h3>
+                                        <p class="text-zinc-400 text-xs mb-2 line-clamp-1 font-light">${p.desc}</p>
+                                        <div class="text-[11px] text-zinc-500 mb-3">Colors: ${colorNames}</div>
+                                        <div class="font-semibold mb-6 text-sm">${p.price} EGP</div>
+                                    </div>
+                                    <div class="flex gap-2.5 pt-4 border-t border-zinc-100">
+                                        <button onclick="openEditModal(${p.id})" class="flex-1 bg-zinc-100 text-zinc-900 text-[11px] uppercase tracking-wider font-semibold py-2.5 rounded-xl hover:bg-zinc-200 smooth-transition">Edit</button>
+                                        <button onclick="deleteProduct(${p.id})" class="flex-1 bg-rose-50 text-rose-600 text-[11px] uppercase tracking-wider font-semibold py-2.5 rounded-xl hover:bg-rose-100 smooth-transition">Delete</button>
+                                    </div>
+                                </div>
+                            </div>
+                        `;
+                    }).join('')}
+                </div>
+
+                ${showAddModal ? `
+                    <div class="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+                        <div class="bg-white rounded-2xl p-6 sm:p-8 max-w-xl w-full shadow-xl max-h-[90vh] overflow-y-auto border border-zinc-200">
+                            <h3 class="text-xl sm:text-2xl font-light tracking-wide mb-1">${editingProduct ? 'Edit Product Details' : 'Add New Product'}</h3>
+                            <p class="text-xs text-zinc-400 mb-6 uppercase tracking-wider">Upload multiple images from your device</p>
+                            
+                            <div class="space-y-5">
+                                <div>
+                                    <label class="block text-[11px] font-semibold uppercase tracking-wider text-zinc-500 mb-2">Product Name</label>
+                                    <input type="text" id="m-name" value="${editingProduct ? editingProduct.name : ''}" placeholder="Enter product name..." class="w-full bg-zinc-50 border border-zinc-200 rounded-xl px-4 py-3.5 text-sm focus:outline-none focus:border-zinc-900">
+                                </div>
+
+                                <div>
+                                    <label class="block text-[11px] font-semibold uppercase tracking-wider text-zinc-500 mb-2">Detailed Description</label>
+                                    <textarea id="m-desc" placeholder="Write a catchy description..." rows="3" class="w-full bg-zinc-50 border border-zinc-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-zinc-900">${editingProduct ? editingProduct.desc : ''}</textarea>
+                                </div>
+
+                                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                    <div>
+                                        <label class="block text-[11px] font-semibold uppercase tracking-wider text-zinc-500 mb-2">Price (EGP)</label>
+                                        <input type="number" id="m-price" value="${editingProduct ? editingProduct.price : ''}" placeholder="0.00" class="w-full bg-zinc-50 border border-zinc-200 rounded-xl px-4 py-3.5 text-sm focus:outline-none focus:border-zinc-900">
+                                    </div>
+                                    <div>
+                                        <label class="block text-[11px] font-semibold uppercase tracking-wider text-zinc-500 mb-2">Sizes (comma separated)</label>
+                                        <input type="text" id="m-sizes" value="${editingProduct && editingProduct.sizes ? editingProduct.sizes.join(', ') : 'S, M, L, XL'}" class="w-full bg-zinc-50 border border-zinc-200 rounded-xl px-4 py-3.5 text-sm focus:outline-none focus:border-zinc-900">
+                                    </div>
+                                </div>
+
+                                <div>
+                                    <label class="block text-[11px] font-semibold uppercase tracking-wider text-zinc-500 mb-2">Colors (comma separated like: Black, Brown, Grey)</label>
+                                    <input type="text" id="m-colors" value="${editingProduct && editingProduct.colors ? editingProduct.colors.join(', ') : 'Black, Brown, Grey'}" class="w-full bg-zinc-50 border border-zinc-200 rounded-xl px-4 py-3.5 text-sm focus:outline-none focus:border-zinc-900">
+                                </div>
+
+                                <div>
+                                    <label class="block text-[11px] font-semibold uppercase tracking-wider text-zinc-500 mb-2">Product Images (Select multiple)</label>
+                                    <input type="file" id="m-images-file" multiple accept="image/*" class="w-full bg-zinc-50 border border-zinc-200 rounded-xl px-4 py-3 text-sm text-zinc-500 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-zinc-900 file:text-white hover:file:bg-zinc-800 smooth-transition">
+                                </div>
+
+                                <div class="flex gap-3 pt-4">
+                                    <button onclick="saveProductModal()" class="flex-1 bg-zinc-900 text-white py-4 rounded-xl text-xs uppercase tracking-widest font-semibold hover:bg-zinc-800 smooth-transition">Save Changes</button>
+                                    <button onclick="closeAddModal()" class="bg-zinc-100 text-zinc-700 px-6 py-4 rounded-xl text-xs uppercase tracking-widest font-semibold hover:bg-zinc-200 smooth-transition">Cancel</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                ` : ''}
+            `;
+        }
+
+        function renderOrderCard(o) {
+            return `
+                <div class="bg-white border ${o.isNew ? 'border-zinc-900 shadow-md ring-1 ring-zinc-900' : 'border-zinc-200 shadow-sm'} rounded-2xl p-6 sm:p-8 relative smooth-transition">
+                    ${o.isNew ? '<span class="absolute top-6 right-6 sm:right-8 bg-zinc-900 text-white text-[10px] font-bold px-3 py-1 rounded-full uppercase tracking-wider">New</span>' : ''}
+                    
+                    <div class="flex flex-col sm:flex-row justify-between sm:items-center mb-6 pb-4 border-b border-zinc-100 text-xs font-semibold text-zinc-500 uppercase tracking-wider pr-12 gap-2">
+                        <span class="bg-zinc-100 text-zinc-900 px-3 py-1 rounded-full self-start">Order #${o.id}</span>
+                        <span>${o.date}</span>
+                    </div>
+                    
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6 text-sm bg-zinc-50/80 p-5 sm:p-6 rounded-xl border border-zinc-200/60">
+                        <p><b class="text-zinc-400 uppercase text-[11px] block mb-1">Customer Name:</b> <span class="text-zinc-900 font-medium">${o.customer}</span></p>
+                        <p><b class="text-zinc-400 uppercase text-[11px] block mb-1">Phone Number:</b> <span class="text-zinc-900 font-medium">${o.phone}</span></p>
+                        <p class="sm:col-span-2"><b class="text-zinc-400 uppercase text-[11px] block mb-1">Shipping Address:</b> <span class="text-zinc-900 font-medium">${o.address}</span></p>
+                    </div>
+
+                    <div class="space-y-4 mb-6">
+                        <h4 class="text-xs uppercase tracking-wider text-zinc-400 font-semibold">Ordered Items:</h4>
+                        <div class="space-y-3">
+                            ${o.items && o.items.length > 0 ? o.items.map(item => `
+                                <div class="p-4 bg-white border border-zinc-200 rounded-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                                    <div class="flex items-center gap-4">
+                                        <img src="${item.images && item.images[0] ? item.images[0] : ''}" class="w-16 h-16 rounded-lg object-cover border border-zinc-200 shadow-sm shrink-0">
+                                        <div>
+                                            <h5 class="text-sm font-semibold text-zinc-900 mb-1">${item.name}</h5>
+                                            <div class="flex flex-wrap gap-2 text-xs">
+                                                <span class="bg-zinc-50 border border-zinc-200 px-2 py-0.5 rounded text-zinc-700"><b>Size:</b> ${item.size}</span>
+                                                <span class="bg-zinc-50 border border-zinc-200 px-2 py-0.5 rounded text-zinc-700"><b>Color:</b> ${item.color}</span>
+                                                <span class="bg-zinc-50 border border-zinc-200 px-2 py-0.5 rounded text-zinc-700"><b>Qty:</b> ${item.qty}</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="text-right sm:text-left self-end sm:self-center w-full sm:w-auto pt-2 sm:pt-0 border-t sm:border-t-0 border-zinc-100 flex justify-between sm:block">
+                                        <span class="text-xs text-zinc-400 block uppercase tracking-wider">Item Total</span>
+                                        <span class="text-base font-bold text-zinc-900">${item.price * item.qty} EGP</span>
+                                    </div>
+                                </div>
+                            `).join('') : '<p class="py-3 text-xs text-zinc-400">No items specified</p>'}
+                        </div>
+                    </div>
+
+                    <div class="pt-4 border-t border-zinc-100 flex flex-col sm:flex-row justify-between sm:items-center gap-4">
+                        <button onclick="deleteSingleOrder(${o.id})" class="text-xs text-rose-500 hover:text-rose-700 font-semibold uppercase tracking-wider smooth-transition self-start">Delete Order</button>
+                        <div class="flex items-center justify-between sm:justify-end gap-3 w-full sm:w-auto">
+                            <span class="text-xs uppercase tracking-wider text-zinc-400 font-semibold">Total Invoice Amount</span>
+                            <span class="text-xl sm:text-2xl font-light tracking-wide text-zinc-900">${o.total} EGP</span>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        function addToCartWithOptions(id) {
+            const product = products.find(p => p.id === id);
+            const qty = parseInt(document.getElementById('selected-qty').value) || 1;
+            
+            cart.push({
+                ...product,
+                size: currentSelectedSize || 'Default',
+                color: currentSelectedColor || 'Default',
+                qty: qty
+            });
+            showNotification('Product successfully added to bag');
+            render();
+        }
+
+        function buyItemAgain(index) {
+            const item = cart[index];
+            cart.push({
+                ...item,
+                qty: 1
+            });
+            showNotification('Added another piece of this item to bag');
+            render();
+        }
+
+        function buyAllAgain() {
+            const duplicated = cart.map(item => ({ ...item }));
+            cart = cart.concat(duplicated);
+            showNotification('All items added again to bag');
+            render();
+        }
+
+        function removeFromCart(index) {
+            cart.splice(index, 1);
+            showNotification('Product removed from bag');
+            render();
+        }
+
+        function toggleWishlist(id) {
+            const index = wishlist.findIndex(item => item.id === id);
+            if (index > -1) {
+                wishlist.splice(index, 1);
+                showNotification('Removed from wishlist');
+            } else {
+                wishlist.push(products.find(p => p.id === id));
+                showNotification('Added to wishlist');
+            }
+            render();
+        }
+
+        function openCheckoutModal() {
+            if (!selectedProduct && cart.length === 0) {
+                alert('Cart is empty!');
+                return;
+            }
+            showCheckoutModal = true;
+            render();
+        }
+
+        function submitDirectOrder() {
+            const phone = document.getElementById('chk-phone').value.trim();
+            const address = document.getElementById('chk-address').value.trim();
+
+            if (!phone || !address) {
+                alert('Please enter phone number and shipping address.');
+                return;
+            }
+
+            let itemsToOrder = [];
+            if (selectedProduct) {
+                const qty = parseInt(document.getElementById('selected-qty').value) || 1;
+                itemsToOrder = [{ 
+                    ...selectedProduct, 
+                    size: currentSelectedSize || 'Default', 
+                    color: currentSelectedColor || 'Default', 
+                    qty: qty 
+                }];
+            } else {
+                itemsToOrder = [...cart];
+            }
+
+            const total = itemsToOrder.reduce((sum, item) => sum + (item.price * item.qty), 0);
+
+            orders.unshift({
+                id: Date.now(),
+                customer: currentUser || 'Customer',
+                phone: phone,
+                address: address,
+                items: itemsToOrder,
+                total: total,
+                date: new Date().toLocaleDateString('en-US'),
+                isNew: true
+            });
+
+            localStorage.setItem('nurva_orders', JSON.stringify(orders));
+            cart = [];
+            selectedProduct = null;
+            showCheckoutModal = false;
+            currentView = 'user-products';
+            showNotification('Order placed successfully!');
+            render();
+        }
+
+        function deleteSingleOrder(id) {
+            if (confirm('Are you sure you want to delete this order?')) {
+                orders = orders.filter(o => o.id !== id);
+                localStorage.setItem('nurva_orders', JSON.stringify(orders));
+                showNotification('Order deleted');
+                render();
+            }
+        }
+
+        function clearAllOrders() {
+            if (confirm('Are you sure you want to clear all orders?')) {
+                orders = [];
+                localStorage.setItem('nurva_orders', JSON.stringify(orders));
+                showNotification('All orders cleared');
+                render();
+            }
+        }
+
+        function openAddModal() {
+            editingProduct = null;
+            showAddModal = true;
+            render();
+        }
+
+        function openEditModal(id) {
+            editingProduct = products.find(p => p.id === id);
+            showAddModal = true;
+            render();
+        }
+
+        function closeAddModal() {
+            showAddModal = false;
+            editingProduct = null;
+            render();
+        }
+
+        function saveProductModal() {
+            const name = document.getElementById('m-name').value.trim();
+            const desc = document.getElementById('m-desc').value.trim();
+            const price = parseFloat(document.getElementById('m-price').value);
+            const sizesInput = document.getElementById('m-sizes').value;
+            const colorsInput = document.getElementById('m-colors').value;
+            const fileInput = document.getElementById('m-images-file');
+
+            if (!name || !price) {
+                alert('Please enter product name and base price.');
+                return;
+            }
+
+            const sizes = sizesInput.split(',').map(s => s.trim()).filter(s => s !== '');
+            const colors = colorsInput.split(',').map(c => c.trim()).filter(c => c !== '');
+
+            if (fileInput.files && fileInput.files.length > 0) {
+                let imagesArray = [];
+                let filesProcessed = 0;
+
+                for (let i = 0; i < fileInput.files.length; i++) {
+                    const reader = new FileReader();
+                    reader.onload = function(e) {
+                        imagesArray.push(e.target.result);
+                        filesProcessed++;
+
+                        if (filesProcessed === fileInput.files.length) {
+                            finishSavingProduct(name, desc, price, sizes, colors, imagesArray);
+                        }
+                    };
+                    reader.readAsDataURL(fileInput.files[i]);
+                }
+            } else {
+                const defaultImages = editingProduct ? editingProduct.images : ['https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?w=800'];
+                finishSavingProduct(name, desc, price, sizes, colors, defaultImages);
+            }
+        }
+
+        function finishSavingProduct(name, desc, price, sizes, colors, images) {
+            if (editingProduct) {
+                products = products.map(p => p.id === editingProduct.id ? { ...p, name, desc, price, sizes, colors, images } : p);
+                showNotification('Product updated successfully');
+            } else {
+                products.push({ id: Date.now(), name, desc, price, sizes, colors, images });
+                showNotification('Product added successfully');
+            }
+
+            localStorage.setItem('nurva_products', JSON.stringify(products));
+            closeAddModal();
+            render();
+        }
+
+        function deleteProduct(id) {
+            if (confirm('Are you sure you want to delete this product?')) {
+                products = products.filter(p => p.id !== id);
+                localStorage.setItem('nurva_products', JSON.stringify(products));
+                showNotification('Product deleted');
+                render();
+            }
+        }
+
+        render();
+    </script>
+</body>
+</html>
